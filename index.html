@@ -5,154 +5,214 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🎁 Все актуальные конкурсы (VIP) — ШАНС</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;background:#ffcc66;color:#7a2e14;margin:0;padding:20px}
-    h1{margin:0 0 12px;text-align:center;color:#a64214}
-    table{width:100%;border-collapse:collapse;background:#fff8e1}
-    th,td{border:1px solid #e0a958;padding:10px;text-align:left;vertical-align:top}
-    th{background:#ffd27f}
-    a{color:#a64214;text-decoration:none}
+    :root{
+      --bg:#ffcc66;
+      --panel:#fff8e1;
+      --accent:#a64214;
+      --border:#e0a958;
+      --thead:#ffd27f;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#7a2e14;margin:0;padding:14px}
+    h1{margin:0 0 12px;text-align:center;color:var(--accent);line-height:1.2}
+    .wrap{
+      position:relative;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:10px;
+      /* высота под окно мини‑аппа */
+      max-height:82vh;
+      overflow:auto; /* вертикальная прокрутка, если строк много */
+    }
+    .table-scroll{
+      overflow:auto;       /* горизонтальная прокрутка */
+      border:1px solid var(--border);
+    }
+    table{
+      border-collapse:collapse;
+      width:100%;
+      min-width:1100px;     /* чтобы на телефоне был виден горизонтальный скролл */
+      background:var(--panel);
+    }
+    th,td{
+      border:1px solid var(--border);
+      padding:10px;
+      text-align:left;
+      vertical-align:top;
+    }
+    th{
+      background:var(--thead);
+      position:sticky;
+      top:0;                /* прилипшая шапка */
+      z-index:5;
+    }
+    a{color:var(--accent);text-decoration:none}
     a:hover{text-decoration:underline}
+    /* стрелка‑подсказка прокрутки вправо */
+    .hint-right{
+      position:absolute;
+      right:12px;
+      top:46px;
+      width:28px;height:28px;
+      border-radius:50%;
+      background:rgba(166,66,20,.85);
+      display:none;
+      align-items:center;justify-content:center;
+      color:#fff; font-size:18px; line-height:1;
+      box-shadow:0 2px 8px rgba(0,0,0,.2);
+      animation:pulse 1.6s ease-in-out infinite;
+      z-index:10;
+    }
+    @keyframes pulse{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
+    /* плавные скролл‑полосы */
+    .wrap::-webkit-scrollbar,
+    .table-scroll::-webkit-scrollbar{height:10px;width:10px}
+    .wrap::-webkit-scrollbar-thumb,
+    .table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+    .wrap::-webkit-scrollbar-track,
+    .table-scroll::-webkit-scrollbar-track{background:#ffe7b1}
   </style>
 </head>
 <body>
   <h1>🎁 Все актуальные конкурсы (VIP)</h1>
-  <table id="tbl">
-    <thead>
-      <tr>
-        <th>Канал</th>
-        <th>Ссылка на розыгрыш</th>
-        <th>Призы</th>
-        <th>Дата окончания</th>
-        <th>Условия</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+
+  <div class="wrap" id="wrap">
+    <div class="hint-right" id="hintRight">➜</div>
+    <div class="table-scroll" id="ts">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Канал</th>
+            <th>Ссылка на розыгрыш</th>
+            <th>Призы</th>
+            <th>Дата окончания</th>
+            <th>Условия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
 
   <script>
+    // Максимизируем высоту окна мини‑аппа
+    try{Telegram.WebApp.ready(); Telegram.WebApp.expand();}catch(e){}
+
     const SHEET_ID   = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
     const SHEET_NAME = "Конкурсы ШАНС";
     const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=A:G`;
 
-    function normalizeTelegramLink(raw) {
-      if (!raw) return null;
+    function normalizeTelegramLink(raw){
+      if(!raw) return null;
       let s = String(raw).trim();
-      if (!s) return null;
-      if (s.startsWith("@")) s = "https://t.me/" + s.slice(1);
-      if (s.startsWith("t.me/")) s = "https://" + s;
-      if (s.startsWith("telegram.me/")) s = "https://" + s;
-      if (!/^https?:\/\//i.test(s) && /^[A-Za-z0-9_]+$/.test(s)) s = "https://t.me/" + s;
-      if (/^https?:\/\//i.test(s)) return s;
-      return null;
+      if(!s) return null;
+      if(s.startsWith("@")) s = "https://t.me/" + s.slice(1);
+      if(s.startsWith("t.me/")||s.startsWith("telegram.me/")) s = "https://" + s;
+      if(!/^https?:\/\//i.test(s) && /^[A-Za-z0-9_\/]+$/.test(s)) s = "https://t.me/" + s;
+      return /^https?:\/\//i.test(s) ? s : null;
     }
-
-    function parseSheetDate(val) {
-      if (!val) return null;
+    function parseSheetDate(val){
+      if(!val) return null;
       const str = String(val);
       let m = str.match(/Date\((\d+),\s*(\d+),\s*(\d+)\)/);
-      if (m) return new Date(+m[1], +m[2], +m[3]);
+      if(m) return new Date(+m[1],+m[2],+m[3]);
       m = str.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})$/);
-      if (m) return new Date((m[3].length===2?('20'+m[3]):m[3]), +m[2]-1, +m[1]);
-      const d = new Date(str);
-      return isNaN(d) ? null : d;
+      if(m) return new Date((m[3].length===2?('20'+m[3]):m[3]), +m[2]-1, +m[1]);
+      const d = new Date(str); return isNaN(d)?null:d;
     }
-
     function formatDate(val){
-      const d = parseSheetDate(val);
-      if (!d) return val || "";
+      const d = parseSheetDate(val); if(!d) return val||"";
       return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});
     }
-
     function onlyActive(endRaw, filterRaw){
       const today = new Date(); today.setHours(0,0,0,0);
-      const df = parseSheetDate(filterRaw) || parseSheetDate(endRaw);
-      if (!df) return true;
-      return df >= today;
+      const df = parseSheetDate(filterRaw)||parseSheetDate(endRaw);
+      if(!df) return true; return df>=today;
     }
-
-    function linkify(text) {
-      if (!text) return "";
-      let t = String(text);
-      t = t.replace(/\r\n|\r/g, "\n");
-      t = t.replace(/((https?:\/\/)[^\s<]+)/gi, (m) => `<a href="${m}" target="_blank">${m}</a>`);
-      t = t.replace(/(?:^|\s)(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_\/]+)/gi, (m, p1) => {
-        const url = `https://t.me/${p1}`;
-        return ` <a href="${url}" target="_blank">${url}</a>`;
-      });
-      t = t.replace(/(^|\s)@([A-Za-z0-9_]+)/g, (m, sp, u) => {
-        const url = `https://t.me/${u}`;
-        return `${sp}<a href="${url}" target="_blank">@${u}</a>`;
-      });
-      t = t.replace(/\n/g, "<br>");
-      return t;
+    function linkify(text){
+      if(!text) return "";
+      let t = String(text).replace(/\r\n|\r/g,"\n");
+      t = t.replace(/((https?:\/\/)[^\s<]+)/gi, m=>`<a href="${m}" target="_blank">${m}</a>`);
+      t = t.replace(/(?:^|\s)(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_\/]+)/gi,(m,p1)=>` <a href="https://t.me/${p1}" target="_blank">https://t.me/${p1}</a>`);
+      t = t.replace(/(^|\s)@([A-Za-z0-9_]+)/g,(m,sp,u)=>`${sp}<a href="https://t.me/${u}" target="_blank">@${u}</a>`);
+      return t.replace(/\n/g,"<br>");
     }
 
     fetch(URL)
-      .then(r => r.text())
-      .then(txt => {
-        const json = JSON.parse(txt.substr(47).slice(0, -2));
+      .then(r=>r.text())
+      .then(txt=>{
+        const json = JSON.parse(txt.substr(47).slice(0,-2));
         const rows = json.table.rows || [];
         const tbody = document.querySelector("#tbl tbody");
 
-        rows.forEach(row => {
-          const cells = (row.c || []).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
-
-          if (!onlyActive(cells[3], cells[5])) return;
+        rows.forEach(row=>{
+          const cells = (row.c||[]).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
+          if(!onlyActive(cells[3], cells[5])) return; // фильтр актуальности
 
           const tr = document.createElement("tr");
 
-          const channelTd = document.createElement("td");
+          // A Канал
+          const chTd = document.createElement("td");
           const chUrl = normalizeTelegramLink(cells[0]);
-          if (chUrl){
-            const a = document.createElement("a");
-            a.href = chUrl; a.target="_blank";
+          if(chUrl){
+            const a=document.createElement("a"); a.href=chUrl; a.target="_blank";
             a.textContent = chUrl.replace(/^https?:\/\/(t\.me|telegram\.me)\//i,"");
-            channelTd.appendChild(a);
-          } else {
-            channelTd.textContent = cells[0] || "-";
-          }
-          tr.appendChild(channelTd);
+            chTd.appendChild(a);
+          } else chTd.textContent = cells[0]||"-";
+          tr.appendChild(chTd);
 
+          // B Пост
           const postTd = document.createElement("td");
           const postUrl = normalizeTelegramLink(cells[1]) || (cells[1] && /^https?:\/\//i.test(cells[1]) ? cells[1] : null);
-          if (postUrl){
-            const a = document.createElement("a");
-            a.href = postUrl; a.target="_blank"; a.textContent = "Открыть";
+          if(postUrl){
+            const a=document.createElement("a"); a.href=postUrl; a.target="_blank"; a.textContent="Открыть";
             postTd.appendChild(a);
-          } else {
-            postTd.textContent = cells[1] || "-";
-          }
+          } else postTd.textContent = cells[1]||"-";
           tr.appendChild(postTd);
 
-          const prizesTd = document.createElement("td");
-          prizesTd.innerHTML = linkify(cells[2] || "");
+          // C Призы
+          const prizesTd=document.createElement("td");
+          prizesTd.innerHTML = linkify(cells[2]||"");
           tr.appendChild(prizesTd);
 
-          const dateTd = document.createElement("td");
-          dateTd.textContent = formatDate(cells[3]);
-          tr.appendChild(dateTd);
+          // D Дата
+          const dTd=document.createElement("td");
+          dTd.textContent = formatDate(cells[3]);
+          tr.appendChild(dTd);
 
-          const condTd = document.createElement("td");
-          condTd.innerHTML = linkify(cells[4] || "");
+          // E Условия
+          const condTd=document.createElement("td");
+          condTd.innerHTML = linkify(cells[4]||"");
           tr.appendChild(condTd);
 
           tbody.appendChild(tr);
         });
 
-        if (!tbody.children.length){
-          const tr = document.createElement("tr");
-          const td = document.createElement("td");
-          td.colSpan = 5; td.textContent = "Нет актуальных конкурсов.";
+        if(!tbody.children.length){
+          const tr=document.createElement("tr");
+          const td=document.createElement("td"); td.colSpan=5; td.textContent="Нет актуальных конкурсов.";
           tr.appendChild(td); tbody.appendChild(tr);
         }
+
+        // показать/скрыть стрелку в зависимости от горизонтального переполнения
+        const ts = document.getElementById("ts");
+        const hint = document.getElementById("hintRight");
+        const updateHint = () => {
+          const need = ts.scrollWidth > ts.clientWidth && ts.scrollLeft < (ts.scrollWidth - ts.clientWidth - 8);
+          hint.style.display = need ? "flex" : "none";
+        };
+        ts.addEventListener("scroll", updateHint);
+        window.addEventListener("resize", updateHint);
+        updateHint();
       })
-      .catch(err => {
+      .catch(err=>{
         console.error(err);
         const tbody = document.querySelector("#tbl tbody");
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 5; td.textContent = "Не удалось загрузить данные. Попробуйте позже.";
+        const tr=document.createElement("tr");
+        const td=document.createElement("td"); td.colSpan=5; td.textContent="Не удалось загрузить данные. Попробуйте позже.";
         tr.appendChild(td); tbody.appendChild(tr);
       });
   </script>
