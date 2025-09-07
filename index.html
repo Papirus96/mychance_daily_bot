@@ -4,113 +4,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ШАНС — Все конкурсы (VIP)</title>
+    <title>Все конкурсы — ШАНС</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: #ffcc66;
-            color: #7a2e14;
-            margin: 0;
+            background-color: #fff8e1;
+            color: #5d4037;
             padding: 20px;
         }
         h1 {
             text-align: center;
-            font-size: 28px;
-            color: #a64214;
+            color: #e65100;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
-            background: #fff8e1;
         }
         th, td {
-            border: 1px solid #e0a958;
-            padding: 12px;
+            border: 1px solid #e65100;
+            padding: 10px;
             text-align: left;
         }
         th {
-            background-color: #ffd27f;
+            background-color: #ffe0b2;
+        }
+        tr:nth-child(even) {
+            background-color: #fff3e0;
         }
         a {
-            color: #a64214;
+            color: #e65100;
             text-decoration: none;
         }
         a:hover {
             text-decoration: underline;
         }
-        .footer {
-            text-align: center;
-            margin-top: 40px;
-            font-size: 14px;
-            color: #9c4f20;
-        }
     </style>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script type="text/javascript">
-        google.charts.load('current', {'packages':['table']});
-        google.charts.setOnLoadCallback(drawTable);
-
-        function drawTable() {
-            const queryString = encodeURIComponent("SELECT A, B, C, D, E WHERE A IS NOT NULL");
-            const url = 'https://docs.google.com/spreadsheets/d/1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U/gviz/tq?sheet=Конкурсы%20ШАНС&range=A:E&tq=' + queryString;
-
-            fetch(url)
-                .then(res => res.text())
-                .then(rep => {
-                    const json = JSON.parse(rep.substr(47).slice(0, -2));
-                    const table = document.createElement("table");
-                    const thead = document.createElement("thead");
-                    thead.innerHTML = `<tr>
-                        <th>Канал</th>
-                        <th>Ссылка на розыгрыш</th>
-                        <th>Призы</th>
-                        <th>Дата окончания</th>
-                        <th>Условия</th>
-                    </tr>`;
-                    table.appendChild(thead);
-
-                    const tbody = document.createElement("tbody");
-                    json.table.rows.forEach(row => {
-                        const cells = row.c.map(cell => (cell && cell.v) || "");
-                        const tr = document.createElement("tr");
-
-                        // Ссылка на канал
-                        const channelTd = document.createElement("td");
-                        const channelLink = document.createElement("a");
-                        channelLink.href = cells[0];
-                        channelLink.textContent = new URL(cells[0]).hostname.replace("t.me/", "");
-                        channelLink.target = "_blank";
-                        channelTd.appendChild(channelLink);
-                        tr.appendChild(channelTd);
-
-                        // Ссылка на розыгрыш
-                        const drawTd = document.createElement("td");
-                        const drawLink = document.createElement("a");
-                        drawLink.href = cells[1];
-                        drawLink.textContent = "Открыть";
-                        drawLink.target = "_blank";
-                        drawTd.appendChild(drawLink);
-                        tr.appendChild(drawTd);
-
-                        // Остальные поля
-                        for (let i = 2; i < cells.length; i++) {
-                            const td = document.createElement("td");
-                            td.textContent = cells[i];
-                            tr.appendChild(td);
-                        }
-
-                        tbody.appendChild(tr);
-                    });
-                    table.appendChild(tbody);
-                    document.getElementById("table-container").appendChild(table);
-                });
-        }
-    </script>
 </head>
 <body>
-    <h1>🎁 Все актуальные конкурсы (VIP)</h1>
-    <div id="table-container"></div>
-    <div class="footer">Данные из Google Таблицы • Обновляется автоматически</div>
+    <h1>Все активные конкурсы</h1>
+    <table id="contestTable">
+        <thead>
+            <tr>
+                <th>Канал</th>
+                <th>Ссылка на розыгрыш</th>
+                <th>Призы</th>
+                <th>Дата окончания</th>
+                <th>Условия</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        const SHEET_ID = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
+        const SHEET_NAME = "Активные";
+        const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${SHEET_NAME}`;
+
+        fetch(URL)
+            .then(res => res.text())
+            .then(data => {
+                const json = JSON.parse(data.substr(47).slice(0, -2));
+                const rows = json.table.rows;
+                const table = document.getElementById("contestTable").querySelector("tbody");
+
+                rows.forEach(row => {
+                    const tr = document.createElement("tr");
+                    const cells = row.c.map(c => (c ? c.v : ""));
+
+                    // Канал (с безопасной ссылкой)
+                    const channelTd = document.createElement("td");
+                    const link = cells[0];
+                    if (link && link.startsWith("http")) {
+                        const channelLink = document.createElement("a");
+                        channelLink.href = link;
+                        channelLink.textContent = link.replace("https://t.me/", "");
+                        channelLink.target = "_blank";
+                        channelTd.appendChild(channelLink);
+                    } else {
+                        channelTd.textContent = link || "-";
+                    }
+                    tr.appendChild(channelTd);
+
+                    // Остальные ячейки
+                    for (let i = 1; i < cells.length; i++) {
+                        const td = document.createElement("td");
+                        td.textContent = cells[i] || "-";
+                        tr.appendChild(td);
+                    }
+                    table.appendChild(tr);
+                });
+            })
+            .catch(err => {
+                console.error("Ошибка загрузки данных:", err);
+                const table = document.getElementById("contestTable").querySelector("tbody");
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 5;
+                td.textContent = "Не удалось загрузить данные. Попробуйте позже.";
+                tr.appendChild(td);
+                table.appendChild(tr);
+            });
+    </script>
 </body>
 </html>
