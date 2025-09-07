@@ -13,7 +13,6 @@
     th{background:#ffd27f}
     a{color:#a64214;text-decoration:none}
     a:hover{text-decoration:underline}
-    .muted{color:#9a7b60}
   </style>
 </head>
 <body>
@@ -31,16 +30,11 @@
     <tbody></tbody>
   </table>
 
-  <p class="muted" style="text-align:center;margin-top:14px">Источник данных: Google Таблица «Конкурсы ШАНС». Технические столбцы не отображаются.</p>
-
   <script>
-    // === НАСТРОЙКИ ===
     const SHEET_ID   = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
-    const SHEET_NAME = "Конкурсы ШАНС"; // основной лист
-    // Берём A:G, рендерим только A..E (F,G = тех. колонки)
+    const SHEET_NAME = "Конкурсы ШАНС";
     const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=A:G`;
 
-    // Нормализация телеграм-ссылок: "@name", "t.me/name", "https://t.me/name", "telegram.me/name"
     function normalizeTelegramLink(raw) {
       if (!raw) return null;
       let s = String(raw).trim();
@@ -53,14 +47,11 @@
       return null;
     }
 
-    // Преобразование даты из разных форматов
     function parseSheetDate(val) {
       if (!val) return null;
       const str = String(val);
-      // GViz формат: Date(YYYY,MM,DD)
       let m = str.match(/Date\((\d+),\s*(\d+),\s*(\d+)\)/);
       if (m) return new Date(+m[1], +m[2], +m[3]);
-      // DD.MM.YYYY / DD-MM-YYYY
       m = str.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})$/);
       if (m) return new Date((m[3].length===2?('20'+m[3]):m[3]), +m[2]-1, +m[1]);
       const d = new Date(str);
@@ -76,37 +67,23 @@
     function onlyActive(endRaw, filterRaw){
       const today = new Date(); today.setHours(0,0,0,0);
       const df = parseSheetDate(filterRaw) || parseSheetDate(endRaw);
-      if (!df) return true; // если нет даты — можно показывать
+      if (!df) return true;
       return df >= today;
     }
 
-    // Превращаем ссылки в тексте в кликабельные <a>
-    // Поддерживает http(s), t.me/..., @username
     function linkify(text) {
       if (!text) return "";
       let t = String(text);
-
-      // Сначала нормализуем переносы
       t = t.replace(/\r\n|\r/g, "\n");
-
-      // http(s) ссылки
-      t = t.replace(/((https?:\/\/)[^\s<]+)/gi, (m) => {
-        return `<a href="${m}" target="_blank">${m}</a>`;
-      });
-
-      // t.me/ или telegram.me/
+      t = t.replace(/((https?:\/\/)[^\s<]+)/gi, (m) => `<a href="${m}" target="_blank">${m}</a>`);
       t = t.replace(/(?:^|\s)(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_\/]+)/gi, (m, p1) => {
         const url = `https://t.me/${p1}`;
         return ` <a href="${url}" target="_blank">${url}</a>`;
       });
-
-      // @username (не внутри ссылок)
       t = t.replace(/(^|\s)@([A-Za-z0-9_]+)/g, (m, sp, u) => {
         const url = `https://t.me/${u}`;
         return `${sp}<a href="${url}" target="_blank">@${u}</a>`;
       });
-
-      // Переносы строк -> <br>
       t = t.replace(/\n/g, "<br>");
       return t;
     }
@@ -121,12 +98,10 @@
         rows.forEach(row => {
           const cells = (row.c || []).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
 
-          // Индексы: A=0 канал, B=1 пост, C=2 призы, D=3 дата, E=4 условия, F=5 дата_фильтрации, G=6 отправить
           if (!onlyActive(cells[3], cells[5])) return;
 
           const tr = document.createElement("tr");
 
-          // Канал
           const channelTd = document.createElement("td");
           const chUrl = normalizeTelegramLink(cells[0]);
           if (chUrl){
@@ -139,7 +114,6 @@
           }
           tr.appendChild(channelTd);
 
-          // Ссылка на розыгрыш
           const postTd = document.createElement("td");
           const postUrl = normalizeTelegramLink(cells[1]) || (cells[1] && /^https?:\/\//i.test(cells[1]) ? cells[1] : null);
           if (postUrl){
@@ -151,17 +125,14 @@
           }
           tr.appendChild(postTd);
 
-          // Призы
           const prizesTd = document.createElement("td");
           prizesTd.innerHTML = linkify(cells[2] || "");
           tr.appendChild(prizesTd);
 
-          // Дата окончания
           const dateTd = document.createElement("td");
           dateTd.textContent = formatDate(cells[3]);
           tr.appendChild(dateTd);
 
-          // Условия (с автоматической кликабельностью ссылок и @)
           const condTd = document.createElement("td");
           condTd.innerHTML = linkify(cells[4] || "");
           tr.appendChild(condTd);
