@@ -13,6 +13,8 @@
       --accent:#a64214;
       --border:#e0a958;
       --thead:#ffd27f;
+      --track:#ffdca8;
+      --thumb:#a64214;
     }
     *{box-sizing:border-box}
     body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#7a2e14;margin:0;padding:14px}
@@ -22,19 +24,20 @@
       background:var(--panel);
       border:1px solid var(--border);
       border-radius:6px;
-      padding:10px;
-      /* высота под окно мини‑аппа */
+      padding:10px 10px 16px;
       max-height:82vh;
-      overflow:auto; /* вертикальная прокрутка, если строк много */
+      overflow:auto; /* вертикальная прокрутка */
     }
     .table-scroll{
-      overflow:auto;       /* горизонтальная прокрутка */
+      overflow:auto;       /* горизонтальная прокрутка (скрываем системный скролл) */
       border:1px solid var(--border);
+      scrollbar-width:none; /* firefox */
     }
+    .table-scroll::-webkit-scrollbar{display:none} /* webkit */
     table{
       border-collapse:collapse;
       width:100%;
-      min-width:1100px;     /* чтобы на телефоне был виден горизонтальный скролл */
+      min-width:1200px;     /* явный намёк на горизонтальный скролл на телефонах */
       background:var(--panel);
     }
     th,td{
@@ -46,34 +49,51 @@
     th{
       background:var(--thead);
       position:sticky;
-      top:0;                /* прилипшая шапка */
+      top:0;
       z-index:5;
     }
     a{color:var(--accent);text-decoration:none}
     a:hover{text-decoration:underline}
-    /* стрелка‑подсказка прокрутки вправо */
+
+    /* стрелка‑подсказка вправо */
     .hint-right{
       position:absolute;
-      right:12px;
+      right:14px;
       top:46px;
-      width:28px;height:28px;
+      width:32px;height:32px;
       border-radius:50%;
-      background:rgba(166,66,20,.85);
+      background:rgba(166,66,20,.9);
       display:none;
       align-items:center;justify-content:center;
-      color:#fff; font-size:18px; line-height:1;
-      box-shadow:0 2px 8px rgba(0,0,0,.2);
+      color:#fff; font-size:20px; line-height:1;
+      box-shadow:0 2px 10px rgba(0,0,0,.25);
       animation:pulse 1.6s ease-in-out infinite;
       z-index:10;
     }
-    @keyframes pulse{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
-    /* плавные скролл‑полосы */
-    .wrap::-webkit-scrollbar,
-    .table-scroll::-webkit-scrollbar{height:10px;width:10px}
-    .wrap::-webkit-scrollbar-thumb,
-    .table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
-    .wrap::-webkit-scrollbar-track,
-    .table-scroll::-webkit-scrollbar-track{background:#ffe7b1}
+    @keyframes pulse{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
+
+    /* ВНЕШНИЙ горизонтальный ползунок */
+    .hscroll{
+      margin-top:8px;
+      height:14px;
+      background:var(--track);
+      border:1px solid var(--border);
+      border-radius:10px;
+      position:relative;
+      user-select:none;
+      touch-action:none;
+    }
+    .hscroll .thumb{
+      position:absolute;
+      top:1px;
+      left:1px;
+      height:10px;
+      background:var(--thumb);
+      border-radius:8px;
+      box-shadow:0 1px 3px rgba(0,0,0,.25);
+      cursor:grab;
+    }
+    .hscroll .thumb:active{cursor:grabbing}
   </style>
 </head>
 <body>
@@ -81,6 +101,7 @@
 
   <div class="wrap" id="wrap">
     <div class="hint-right" id="hintRight">➜</div>
+
     <div class="table-scroll" id="ts">
       <table id="tbl">
         <thead>
@@ -95,6 +116,9 @@
         <tbody></tbody>
       </table>
     </div>
+
+    <!-- ВНЕШНИЙ ползунок горизонтальной прокрутки -->
+    <div class="hscroll" id="hscroll"><div class="thumb" id="hthumb" style="width:40px"></div></div>
   </div>
 
   <script>
@@ -150,7 +174,7 @@
 
         rows.forEach(row=>{
           const cells = (row.c||[]).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
-          if(!onlyActive(cells[3], cells[5])) return; // фильтр актуальности
+          if(!onlyActive(cells[3], cells[5])) return;
 
           const tr = document.createElement("tr");
 
@@ -197,16 +221,62 @@
           tr.appendChild(td); tbody.appendChild(tr);
         }
 
-        // показать/скрыть стрелку в зависимости от горизонтального переполнения
+        // --- ВНЕШНИЙ ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ ---
         const ts = document.getElementById("ts");
-        const hint = document.getElementById("hintRight");
-        const updateHint = () => {
-          const need = ts.scrollWidth > ts.clientWidth && ts.scrollLeft < (ts.scrollWidth - ts.clientWidth - 8);
-          hint.style.display = need ? "flex" : "none";
-        };
-        ts.addEventListener("scroll", updateHint);
-        window.addEventListener("resize", updateHint);
-        updateHint();
+        const track = document.getElementById("hscroll");
+        const thumb = document.getElementById("hthumb");
+        const hint  = document.getElementById("hintRight");
+
+        function syncThumb(){
+          const sw = ts.scrollWidth, cw = ts.clientWidth;
+          const tw = track.clientWidth;
+          // ширина ползунка пропорциональна видимой области
+          const thumbW = Math.max(32, Math.round(tw * (cw / sw)));
+          thumb.style.width = thumbW + "px";
+          // позиция ползунка
+          const maxLeft = tw - thumbW - 2;
+          const left = Math.round((ts.scrollLeft / (sw - cw)) * maxLeft);
+          thumb.style.left = (isFinite(left)? left : 0) + "px";
+
+          // показывать стрелку, если есть что скроллить вправо
+          const needHint = sw > cw && ts.scrollLeft < (sw - cw - 8);
+          hint.style.display = needHint ? "flex" : "none";
+          // показывать внешний скролл если есть переполнение
+          track.style.display = (sw > cw) ? "block" : "none";
+        }
+
+        function scrollFromThumb(clientX){
+          const rect = track.getBoundingClientRect();
+          const tw = track.clientWidth;
+          const thW = thumb.clientWidth;
+          const maxLeft = tw - thW - 2;
+          let left = Math.min(Math.max(0, clientX - rect.left - thW/2), maxLeft);
+          thumb.style.left = left + "px";
+
+          // переводим позицию ползунка в scrollLeft таблицы
+          const sw = ts.scrollWidth, cw = ts.clientWidth;
+          const ratio = left / maxLeft;
+          ts.scrollLeft = (sw - cw) * ratio;
+        }
+
+        // Drag & click по треку
+        let dragging = false;
+        thumb.addEventListener("mousedown", e=>{ dragging=true; e.preventDefault(); });
+        document.addEventListener("mousemove", e=>{ if(dragging){ scrollFromThumb(e.clientX); } });
+        document.addEventListener("mouseup",   ()=>{ dragging=false; });
+
+        // Тач‑поддержка
+        thumb.addEventListener("touchstart", e=>{ dragging=true; }, {passive:true});
+        document.addEventListener("touchmove", e=>{ if(dragging){ scrollFromThumb(e.touches[0].clientX); } }, {passive:true});
+        document.addEventListener("touchend",  ()=>{ dragging=false; }, {passive:true});
+
+        // Клик по треку
+        track.addEventListener("mousedown", e=>{ if(e.target!==thumb){ scrollFromThumb(e.clientX); } });
+
+        // Связь с нативным скроллом контейнера
+        ts.addEventListener("scroll", syncThumb);
+        window.addEventListener("resize", syncThumb);
+        setTimeout(syncThumb, 0);
       })
       .catch(err=>{
         console.error(err);
