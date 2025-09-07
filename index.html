@@ -2,109 +2,157 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Все конкурсы — ШАНС</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #fff8e1;
-            color: #5d4037;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #e65100;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #e65100;
-            padding: 10px;
-            text-align: left;
-        }
-        th {
-            background-color: #ffe0b2;
-        }
-        tr:nth-child(even) {
-            background-color: #fff3e0;
-        }
-        a {
-            color: #e65100;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎁 Все актуальные конкурсы (VIP) — ШАНС</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#ffcc66;color:#7a2e14;margin:0;padding:20px}
+    h1{margin:0 0 12px;text-align:center;color:#a64214}
+    table{width:100%;border-collapse:collapse;background:#fff8e1}
+    th,td{border:1px solid #e0a958;padding:10px;text-align:left;vertical-align:top}
+    th{background:#ffd27f}
+    a{color:#a64214;text-decoration:none}
+    a:hover{text-decoration:underline}
+    .muted{color:#9a7b60}
+  </style>
 </head>
 <body>
-    <h1>Все активные конкурсы</h1>
-    <table id="contestTable">
-        <thead>
-            <tr>
-                <th>Канал</th>
-                <th>Ссылка на розыгрыш</th>
-                <th>Призы</th>
-                <th>Дата окончания</th>
-                <th>Условия</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+  <h1>🎁 Все актуальные конкурсы (VIP)</h1>
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Канал</th>
+        <th>Ссылка на розыгрыш</th>
+        <th>Призы</th>
+        <th>Дата окончания</th>
+        <th>Условия</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-    <script>
-        const SHEET_ID = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
-        const SHEET_NAME = "Активные";
-        const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${SHEET_NAME}`;
+  <p class="muted" style="text-align:center;margin-top:14px">Источник данных: Google Таблица «Конкурсы ШАНС». Технические столбцы не отображаются.</p>
 
-        fetch(URL)
-            .then(res => res.text())
-            .then(data => {
-                const json = JSON.parse(data.substr(47).slice(0, -2));
-                const rows = json.table.rows;
-                const table = document.getElementById("contestTable").querySelector("tbody");
+  <script>
+    // === НАСТРОЙКИ ===
+    const SHEET_ID   = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
+    const SHEET_NAME = "Конкурсы ШАНС"; // основной лист
+    // Берём ВСЕ столбцы, но отображаем только A..E (тех. F,G прячем)
+    const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=A:G`;
 
-                rows.forEach(row => {
-                    const tr = document.createElement("tr");
-                    const cells = row.c.map(c => (c ? c.v : ""));
+    // Нормализация ссылок вида "@name", "t.me/name", "https://t.me/name"
+    function normalizeTelegramLink(raw) {
+      if (!raw) return null;
+      let s = String(raw).trim();
+      if (!s) return null;
+      if (s.startsWith("@")) s = "https://t.me/" + s.slice(1);
+      if (s.startsWith("t.me/")) s = "https://" + s;
+      if (s.startsWith("telegram.me/")) s = "https://" + s;
+      if (!/^https?:\/\//i.test(s) && /^[A-Za-z0-9_]+$/.test(s)) s = "https://t.me/" + s;
+      if (/^https?:\/\//i.test(s)) return s;
+      return null;
+    }
 
-                    // Канал (с безопасной ссылкой)
-                    const channelTd = document.createElement("td");
-                    const link = cells[0];
-                    if (link && link.startsWith("http")) {
-                        const channelLink = document.createElement("a");
-                        channelLink.href = link;
-                        channelLink.textContent = link.replace("https://t.me/", "");
-                        channelLink.target = "_blank";
-                        channelTd.appendChild(channelLink);
-                    } else {
-                        channelTd.textContent = link || "-";
-                    }
-                    tr.appendChild(channelTd);
+    // Преобразование даты из разных форматов
+    function parseSheetDate(val) {
+      if (!val) return null;
+      // Прилетает в виде "Date(2025,8,7)" или "7.09.2025" или ISO
+      const str = String(val);
+      let m = str.match(/Date\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if (m) return new Date(+m[1], +m[2], +m[3]);
+      m = str.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})$/);
+      if (m) return new Date(+m[3].padStart(4,"20"), +m[2]-1, +m[1]);
+      const d = new Date(str);
+      return isNaN(d) ? null : d;
+    }
 
-                    // Остальные ячейки
-                    for (let i = 1; i < cells.length; i++) {
-                        const td = document.createElement("td");
-                        td.textContent = cells[i] || "-";
-                        tr.appendChild(td);
-                    }
-                    table.appendChild(tr);
-                });
-            })
-            .catch(err => {
-                console.error("Ошибка загрузки данных:", err);
-                const table = document.getElementById("contestTable").querySelector("tbody");
-                const tr = document.createElement("tr");
-                const td = document.createElement("td");
-                td.colSpan = 5;
-                td.textContent = "Не удалось загрузить данные. Попробуйте позже.";
-                tr.appendChild(td);
-                table.appendChild(tr);
-            });
-    </script>
+    function formatDate(val){
+      const d = parseSheetDate(val);
+      if (!d) return val || "";
+      return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});
+    }
+
+    function onlyActive(endRaw, filterRaw){
+      const today = new Date(); today.setHours(0,0,0,0);
+      const df = parseSheetDate(filterRaw) || parseSheetDate(endRaw);
+      if (!df) return true; // если нет даты — показываем (на усмотрение)
+      return df >= today;
+    }
+
+    fetch(URL)
+      .then(r => r.text())
+      .then(txt => {
+        // gviz-ответ начинается с "google.visualization.Query.setResponse(...);"
+        const json = JSON.parse(txt.substr(47).slice(0, -2));
+        const rows = json.table.rows || [];
+        const tbody = document.querySelector("#tbl tbody");
+
+        rows.forEach(row => {
+          const cells = (row.c || []).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
+
+          // Индексы: A=0 канал, B=1 ссылка, C=2 призы, D=3 дата, E=4 условия, F=5 дата_фильтрации, G=6 отправить
+          if (!onlyActive(cells[3], cells[5])) return; // фильтрация по актуальности
+
+          const tr = document.createElement("tr");
+
+          // Канал (кликабельно при валидной ссылке)
+          const channelTd = document.createElement("td");
+          const chUrl = normalizeTelegramLink(cells[0]);
+          if (chUrl){
+            const a = document.createElement("a");
+            a.href = chUrl; a.target="_blank";
+            a.textContent = chUrl.replace(/^https?:\/\/(t\.me|telegram\.me)\//i,"");
+            channelTd.appendChild(a);
+          } else {
+            channelTd.textContent = cells[0] || "-";
+          }
+          tr.appendChild(channelTd);
+
+          // Ссылка на розыгрыш (делаем кликабельной по тем же правилам)
+          const postTd = document.createElement("td");
+          const postUrl = normalizeTelegramLink(cells[1]) || (cells[1] && cells[1].startsWith("http") ? cells[1] : null);
+          if (postUrl){
+            const a = document.createElement("a");
+            a.href = postUrl; a.target="_blank"; a.textContent = "Открыть";
+            postTd.appendChild(a);
+          } else {
+            postTd.textContent = cells[1] || "-";
+          }
+          tr.appendChild(postTd);
+
+          // Призы (переводим переносы строк в <br>)
+          const prizesTd = document.createElement("td");
+          prizesTd.innerHTML = String(cells[2] || "").replace(/\n/g,"<br>");
+          tr.appendChild(prizesTd);
+
+          // Дата окончания
+          const dateTd = document.createElement("td");
+          dateTd.textContent = formatDate(cells[3]);
+          tr.appendChild(dateTd);
+
+          // Условия
+          const condTd = document.createElement("td");
+          condTd.innerHTML = String(cells[4] || "").replace(/\n/g,"<br>");
+          tr.appendChild(condTd);
+
+          tbody.appendChild(tr);
+        });
+
+        if (!tbody.children.length){
+          const tr = document.createElement("tr");
+          const td = document.createElement("td");
+          td.colSpan = 5; td.textContent = "Нет актуальных конкурсов.";
+          tr.appendChild(td); tbody.appendChild(tr);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        const tbody = document.querySelector("#tbl tbody");
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5; td.textContent = "Не удалось загрузить данные. Попробуйте позже.";
+        tr.appendChild(td); tbody.appendChild(tr);
+      });
+  </script>
 </body>
 </html>
