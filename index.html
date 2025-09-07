@@ -37,10 +37,10 @@
     // === НАСТРОЙКИ ===
     const SHEET_ID   = "1ywWbGtsvKfrYdxFsekvXL7EKmd30_xxZQB0E8XqUU8U";
     const SHEET_NAME = "Конкурсы ШАНС"; // основной лист
-    // Берём ВСЕ столбцы, но отображаем только A..E (тех. F,G прячем)
+    // Берём A:G, рендерим только A..E (F,G = тех. колонки)
     const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=A:G`;
 
-    // Нормализация ссылок вида "@name", "t.me/name", "https://t.me/name"
+    // Нормализация телеграм-ссылок: "@name", "t.me/name", "https://t.me/name", "telegram.me/name"
     function normalizeTelegramLink(raw) {
       if (!raw) return null;
       let s = String(raw).trim();
@@ -56,12 +56,13 @@
     // Преобразование даты из разных форматов
     function parseSheetDate(val) {
       if (!val) return null;
-      // Прилетает в виде "Date(2025,8,7)" или "7.09.2025" или ISO
       const str = String(val);
+      // GViz формат: Date(YYYY,MM,DD)
       let m = str.match(/Date\((\d+),\s*(\d+),\s*(\d+)\)/);
       if (m) return new Date(+m[1], +m[2], +m[3]);
+      // DD.MM.YYYY / DD-MM-YYYY
       m = str.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})$/);
-      if (m) return new Date(+m[3].padStart(4,"20"), +m[2]-1, +m[1]);
+      if (m) return new Date((m[3].length===2?('20'+m[3]):m[3]), +m[2]-1, +m[1]);
       const d = new Date(str);
       return isNaN(d) ? null : d;
     }
@@ -75,14 +76,44 @@
     function onlyActive(endRaw, filterRaw){
       const today = new Date(); today.setHours(0,0,0,0);
       const df = parseSheetDate(filterRaw) || parseSheetDate(endRaw);
-      if (!df) return true; // если нет даты — показываем (на усмотрение)
+      if (!df) return true; // если нет даты — можно показывать
       return df >= today;
+    }
+
+    // Превращаем ссылки в тексте в кликабельные <a>
+    // Поддерживает http(s), t.me/..., @username
+    function linkify(text) {
+      if (!text) return "";
+      let t = String(text);
+
+      // Сначала нормализуем переносы
+      t = t.replace(/\r\n|\r/g, "\n");
+
+      // http(s) ссылки
+      t = t.replace(/((https?:\/\/)[^\s<]+)/gi, (m) => {
+        return `<a href="${m}" target="_blank">${m}</a>`;
+      });
+
+      // t.me/ или telegram.me/
+      t = t.replace(/(?:^|\s)(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_\/]+)/gi, (m, p1) => {
+        const url = `https://t.me/${p1}`;
+        return ` <a href="${url}" target="_blank">${url}</a>`;
+      });
+
+      // @username (не внутри ссылок)
+      t = t.replace(/(^|\s)@([A-Za-z0-9_]+)/g, (m, sp, u) => {
+        const url = `https://t.me/${u}`;
+        return `${sp}<a href="${url}" target="_blank">@${u}</a>`;
+      });
+
+      // Переносы строк -> <br>
+      t = t.replace(/\n/g, "<br>");
+      return t;
     }
 
     fetch(URL)
       .then(r => r.text())
       .then(txt => {
-        // gviz-ответ начинается с "google.visualization.Query.setResponse(...);"
         const json = JSON.parse(txt.substr(47).slice(0, -2));
         const rows = json.table.rows || [];
         const tbody = document.querySelector("#tbl tbody");
@@ -90,12 +121,12 @@
         rows.forEach(row => {
           const cells = (row.c || []).map(c => (c && (c.v!==undefined ? c.v : c.f)) || "");
 
-          // Индексы: A=0 канал, B=1 ссылка, C=2 призы, D=3 дата, E=4 условия, F=5 дата_фильтрации, G=6 отправить
-          if (!onlyActive(cells[3], cells[5])) return; // фильтрация по актуальности
+          // Индексы: A=0 канал, B=1 пост, C=2 призы, D=3 дата, E=4 условия, F=5 дата_фильтрации, G=6 отправить
+          if (!onlyActive(cells[3], cells[5])) return;
 
           const tr = document.createElement("tr");
 
-          // Канал (кликабельно при валидной ссылке)
+          // Канал
           const channelTd = document.createElement("td");
           const chUrl = normalizeTelegramLink(cells[0]);
           if (chUrl){
@@ -108,9 +139,9 @@
           }
           tr.appendChild(channelTd);
 
-          // Ссылка на розыгрыш (делаем кликабельной по тем же правилам)
+          // Ссылка на розыгрыш
           const postTd = document.createElement("td");
-          const postUrl = normalizeTelegramLink(cells[1]) || (cells[1] && cells[1].startsWith("http") ? cells[1] : null);
+          const postUrl = normalizeTelegramLink(cells[1]) || (cells[1] && /^https?:\/\//i.test(cells[1]) ? cells[1] : null);
           if (postUrl){
             const a = document.createElement("a");
             a.href = postUrl; a.target="_blank"; a.textContent = "Открыть";
@@ -120,9 +151,9 @@
           }
           tr.appendChild(postTd);
 
-          // Призы (переводим переносы строк в <br>)
+          // Призы
           const prizesTd = document.createElement("td");
-          prizesTd.innerHTML = String(cells[2] || "").replace(/\n/g,"<br>");
+          prizesTd.innerHTML = linkify(cells[2] || "");
           tr.appendChild(prizesTd);
 
           // Дата окончания
@@ -130,9 +161,9 @@
           dateTd.textContent = formatDate(cells[3]);
           tr.appendChild(dateTd);
 
-          // Условия
+          // Условия (с автоматической кликабельностью ссылок и @)
           const condTd = document.createElement("td");
-          condTd.innerHTML = String(cells[4] || "").replace(/\n/g,"<br>");
+          condTd.innerHTML = linkify(cells[4] || "");
           tr.appendChild(condTd);
 
           tbody.appendChild(tr);
