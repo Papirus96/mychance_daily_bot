@@ -74,15 +74,18 @@
 
     /* ВНЕШНИЙ горизонтальный ползунок */
     .hscroll{
-      margin-top:8px;
-      height:14px;
-      background:var(--track);
-      border:1px solid var(--border);
-      border-radius:10px;
-      position:relative;
-      user-select:none;
-      touch-action:none;
-    }
+  margin-top:8px;
+  height:14px;
+  background:var(--track);
+  border:1px solid var(--border);
+  border-radius:10px;
+  position:sticky;     /* ← фиксируем внутри вертикально скроллящейся .wrap */
+  bottom:0;            /* ← у нижней границы .wrap */
+  left:0;
+  right:0;
+  user-select:none;
+  touch-action:none;
+}
     .hscroll .thumb{
       position:absolute;
       top:1px;
@@ -94,6 +97,30 @@
       cursor:grab;
     }
     .hscroll .thumb:active{cursor:grabbing}
+	/* внешний вертикальный скролл */
+.vscroll{
+  width:14px;
+  background:var(--track);
+  border:1px solid var(--border);
+  border-radius:10px;
+  position:absolute;
+  top:0;             /* сверху вместе с wrap */
+  bottom:30px;       /* оставляем место под горизонтальный */
+  right:0;
+  user-select:none;
+  touch-action:none;
+  display:none;
+}
+.vscroll .thumb{
+  position:absolute;
+  left:1px;
+  width:10px;
+  background:var(--thumb);
+  border-radius:8px;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+  cursor:grab;
+}
+.vscroll .thumb:active{cursor:grabbing}
   </style>
 </head>
 <body>
@@ -119,6 +146,8 @@
 
     <!-- ВНЕШНИЙ ползунок горизонтальной прокрутки -->
     <div class="hscroll" id="hscroll"><div class="thumb" id="hthumb" style="width:40px"></div></div>
+	<!-- ВНЕШНИЙ ползунок вертикальной прокрутки -->
+<div class="vscroll" id="vscroll"><div class="thumb" id="vthumb" style="height:40px"></div></div>
   </div>
 
   <script>
@@ -285,6 +314,58 @@
         const td=document.createElement("td"); td.colSpan=5; td.textContent="Не удалось загрузить данные. Попробуйте позже.";
         tr.appendChild(td); tbody.appendChild(tr);
       });
+// --- ВНЕШНИЙ ВЕРТИКАЛЬНЫЙ СКРОЛЛ (для контейнера #wrap) ---
+const vTrack = document.getElementById('vscroll'); // трек справа
+const vThumb = document.getElementById('vthumb');  // бегунок
+const sc     = document.getElementById('wrap');    // ВЕРТИКАЛЬНО СКРОЛЛИТСЯ ИМЕННО .wrap
+
+function syncV(){
+  const sh = sc.scrollHeight;
+  const ch = sc.clientHeight;
+
+  // показать/скрыть трек при отсутствии переполнения
+  vTrack.style.display = (sh > ch) ? 'block' : 'none';
+  if (sh <= ch) return;
+
+  const trackH = vTrack.clientHeight;
+  const thumbH = Math.max(32, Math.round(trackH * (ch / sh)));
+  vThumb.style.height = thumbH + 'px';
+
+  const maxTop = trackH - thumbH - 2;
+  const top = Math.round((sc.scrollTop / (sh - ch)) * maxTop);
+  vThumb.style.top = (isFinite(top) ? top : 0) + 'px';
+}
+
+function setScrollFromThumb(clientY){
+  const rect   = vTrack.getBoundingClientRect();
+  const trackH = vTrack.clientHeight;
+  const thumbH = vThumb.clientHeight;
+  const maxTop = trackH - thumbH - 2;
+
+  let top = Math.min(Math.max(0, clientY - rect.top - thumbH/2), maxTop);
+  vThumb.style.top = top + 'px';
+
+  const sh = sc.scrollHeight;
+  const ch = sc.clientHeight;
+  sc.scrollTop = (sh - ch) * (top / maxTop);
+}
+
+let vDrag = false;
+vThumb.addEventListener('mousedown', e => { vDrag = true; e.preventDefault(); });
+document.addEventListener('mousemove', e => { if (vDrag) setScrollFromThumb(e.clientY); });
+document.addEventListener('mouseup',   () => { vDrag = false; });
+
+vThumb.addEventListener('touchstart', () => { vDrag = true; }, {passive:true});
+document.addEventListener('touchmove', e => { if (vDrag) setScrollFromThumb(e.touches[0].clientY); }, {passive:true});
+document.addEventListener('touchend',  () => { vDrag = false; }, {passive:true});
+
+// клик по треку
+vTrack.addEventListener('mousedown', e => { if (e.target !== vThumb) setScrollFromThumb(e.clientY); });
+
+// синхронизация со всеми событиями
+sc.addEventListener('scroll', () => { syncThumb(); syncV(); });
+window.addEventListener('resize', () => { syncThumb(); syncV(); });
+setTimeout(() => { syncThumb(); syncV(); }, 0);
   </script>
 </body>
 </html>
